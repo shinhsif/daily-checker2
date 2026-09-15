@@ -19,9 +19,11 @@
   }
   .top{background:var(--card); border-bottom:1px solid var(--line); padding:16px 18px 14px; flex:none}
   .pick{display:flex; align-items:center; gap:12px; margin-bottom:8px;
-        border:1px dashed transparent; border-radius:8px; padding:3px; transition:.12s}
+        border:1px dashed var(--line); border-radius:8px; padding:5px 10px; transition:.12s}
   .pick.over{border-color:var(--ink); background:var(--paper)}
-  .pick .name{color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .pick .name{flex:1; min-width:0; color:var(--muted);
+              overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .pick .tip{flex:none; font-size:12px; color:var(--muted)}
   .pick .name.set{color:var(--ink)}
   button{font:inherit; border:0; border-radius:6px; cursor:pointer}
   .btn{background:var(--paper); color:var(--ink); padding:6px 14px; flex:none}
@@ -64,7 +66,7 @@
   footer .tools{margin-left:auto; display:flex; gap:6px; align-items:center; flex:none}
   footer .link{background:none; color:var(--muted); text-decoration:underline; padding:2px}
   footer .link:hover{color:var(--ink)}
-  @media (max-width:560px){ .bar .tip{display:none} footer{flex-wrap:wrap} }
+  @media (max-width:560px){ .bar .tip,.pick .tip{display:none} footer{flex-wrap:wrap} }
 </style>
 </head>
 <body>
@@ -73,10 +75,12 @@
   <div class="pick" id="zone-com">
     <button class="btn" data-open="com">컴시간 파일 고르기</button>
     <span class="name" id="name-com">선택 안 됨</span>
+    <span class="tip">이 칸에 끌어다 놓아도 됩니다</span>
   </div>
   <div class="pick" id="zone-neis">
     <button class="btn" data-open="neis">NEIS 파일 고르기</button>
     <span class="name" id="name-neis">선택 안 됨</span>
+    <span class="tip">이 칸에 끌어다 놓아도 됩니다 (여러 개)</span>
   </div>
   <button class="run" id="run" disabled>대조 시작</button>
   <input type="file" id="file-com" accept=".xlsx" hidden>
@@ -794,7 +798,7 @@ const TT = (function () {
   function showIdle() {
     const box = el("div", "hint");
     box.append(el("div", undefined, "파일을 고르고 대조를 시작하세요."),
-               el("div", "sub", "컴시간 파일 1개, NEIS 학년별 파일은 한 번에 여러 개 고를 수 있습니다. 끌어다 놓아도 됩니다."));
+               el("div", "sub", "컴시간 파일 1개, NEIS 학년별 파일은 한 번에 여러 개 고를 수 있습니다."));
     $("result").replaceChildren(box);
   }
 
