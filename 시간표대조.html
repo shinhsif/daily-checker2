@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시간표 대조</title>
+<style>
+  :root{
+    --paper:#EEF1F4; --card:#FFFFFF; --ink:#17303F; --muted:#6B7A85;
+    --line:#D3DBE2; --alert:#B3261E; --ok:#0B6E4F; --done:#9AA7B0;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"맑은 고딕","Malgun Gothic",system-ui,sans-serif;
+    font-size:14px; line-height:1.5;
+    display:flex; flex-direction:column;
+  }
+  .top{background:var(--card); border-bottom:1px solid var(--line); padding:16px 18px 14px; flex:none}
+  .pick{display:flex; align-items:center; gap:12px; margin-bottom:8px;
+        border:1px dashed transparent; border-radius:8px; padding:3px; transition:.12s}
+  .pick.over{border-color:var(--ink); background:var(--paper)}
+  .pick .name{color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .pick .name.set{color:var(--ink)}
+  button{font:inherit; border:0; border-radius:6px; cursor:pointer}
+  .btn{background:var(--paper); color:var(--ink); padding:6px 14px; flex:none}
+  .btn:hover{background:var(--line)}
+  .run{background:var(--ink); color:#fff; padding:8px 22px; margin-top:4px}
+  .run:hover{background:var(--muted)}
+  .run:disabled{background:var(--line); color:#B8C2CA; cursor:default}
+  main{flex:1; overflow:auto; padding:14px 16px 20px}
+  .hint{text-align:center; color:var(--muted); padding:60px 20px}
+  .hint .sub{font-size:13px; margin-top:6px}
+  .clean{text-align:center; padding:54px 20px}
+  .clean .big{font-size:26px; font-weight:700; color:var(--ok)}
+  .clean .sub{color:var(--muted); margin-top:8px}
+  .bar{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 12px}
+  .bar .count{font-size:16px; font-weight:700; color:var(--alert)}
+  .bar .count.alldone{color:var(--ok)}
+  .bar .tip{color:var(--muted); font-size:12px; margin-left:auto}
+  .card{background:var(--card); border-radius:8px; padding:13px 16px; margin-bottom:8px;
+        display:flex; gap:14px; align-items:flex-start}
+  .card input[type=checkbox]{width:17px; height:17px; margin:4px 0 0; cursor:pointer; flex:none}
+  .card .body{min-width:0; flex:1}
+  .slot{font-size:15px; font-weight:700}
+  .why{font-size:12px; color:var(--alert); margin-left:10px}
+  .ln{margin-top:6px; display:flex; gap:10px}
+  .ln .tag{flex:none; width:52px; color:var(--muted)}
+  .ln .val{min-width:0; word-break:break-all}
+  .ln .val .mark{margin-left:10px; white-space:nowrap}
+  .ln.neis .val{color:var(--muted)}
+  .card.done .slot,.card.done .why,.card.done .ln,.card.done .ln .tag,
+  .card.done .ln .val{color:var(--done)}
+  .err{background:var(--card); border-radius:8px; padding:20px 22px}
+  .err .t{font-size:15px; font-weight:700; color:var(--alert)}
+  .err .d{margin-top:8px; white-space:pre-wrap}
+  .err .files{margin-top:12px; border-top:1px solid var(--line)}
+  .err .fileline{display:flex; gap:14px; padding:7px 0; border-bottom:1px solid var(--line)}
+  .err .fname{flex:1; min-width:0; color:var(--muted); word-break:break-all}
+  .err .fday{flex:none; font-weight:700}
+  footer{background:var(--card); border-top:1px solid var(--line); padding:7px 18px; flex:none;
+         display:flex; gap:14px; align-items:center; font-size:12px; color:var(--muted)}
+  footer .tools{margin-left:auto; display:flex; gap:6px; align-items:center; flex:none}
+  footer .link{background:none; color:var(--muted); text-decoration:underline; padding:2px}
+  footer .link:hover{color:var(--ink)}
+  @media (max-width:560px){ .bar .tip{display:none} footer{flex-wrap:wrap} }
+</style>
+</head>
+<body>
+
+<section class="top">
+  <div class="pick" id="zone-com">
+    <button class="btn" data-open="com">컴시간 파일 고르기</button>
+    <span class="name" id="name-com">선택 안 됨</span>
+  </div>
+  <div class="pick" id="zone-neis">
+    <button class="btn" data-open="neis">NEIS 파일 고르기</button>
+    <span class="name" id="name-neis">선택 안 됨</span>
+  </div>
+  <button class="run" id="run" disabled>대조 시작</button>
+  <input type="file" id="file-com" accept=".xlsx" hidden>
+  <input type="file" id="file-neis" accept=".xlsx" multiple hidden>
+  <input type="file" id="file-map" accept=".json" hidden>
+</section>
+
+<main id="result"></main>
+
+<footer>
+  <span id="status">파일을 고르고 대조를 시작하세요.</span>
+  <span class="tools">
+    <span>과목 대응표 <b id="mapcount">0</b>개</span>
+    <button class="link" data-map="export">내보내기</button>
+    <button class="link" data-map="import">가져오기</button>
+    <button class="link" data-map="clear">지우기</button>
+  </span>
+</footer>
+
+<script>
+// ===== CORE START =====
+// 컴시간 ↔ NEIS 대조 핵심. 화면도 저장소도 건드리지 않는다.
+// check.py / 시간표대조.pyw 와 같은 규칙으로 판정한다.
+const TT = (function () {
+
+  const VIRTUAL_CLASS = 10;   // 가상학급. NEIS에 교실명만 나오므로 교사만 확인
+
+  // ─────────────── zip (xlsx는 zip 묶음) ───────────────
+
+  async function inflateRaw(bytes) {
+    const s = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(s).arrayBuffer());
+  }
+
+  async function openZip(buf) {
+    const u8 = new Uint8Array(buf), dv = new DataView(buf), len = u8.length;
+    let eocd = -1;
+    for (let i = len - 22; i >= Math.max(0, len - 66000); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error("엑셀 파일(.xlsx)이 아닙니다.\n" +
+      "확장자가 .xls 인 옛 형식이면 엑셀에서 열어 .xlsx 로 저장한 뒤 쓰세요.");
+
+    const count = dv.getUint16(eocd + 10, true);
+    const cdOff = dv.getUint32(eocd + 16, true);
+    if (cdOff === 0xffffffff) throw new Error("파일이 너무 큽니다(ZIP64 형식). 읽을 수 없습니다.");
+
+    const dec = new TextDecoder();
+    const index = new Map();
+    let p = cdOff;
+    for (let i = 0; i < count; i++) {
+      if (p + 46 > len || dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true);
+      const compSize = dv.getUint32(p + 20, true);
+      const nameLen = dv.getUint16(p + 28, true);
+      const extraLen = dv.getUint16(p + 30, true);
+      const cmtLen = dv.getUint16(p + 32, true);
+      const lho = dv.getUint32(p + 42, true);
+      const name = dec.decode(u8.subarray(p + 46, p + 46 + nameLen));
+      index.set(name, { method, compSize, lho });
+      p += 46 + nameLen + extraLen + cmtLen;
+    }
+
+    async function bytes(name) {
+      const e = index.get(name);
+      if (!e) return null;
+      if (dv.getUint32(e.lho, true) !== 0x04034b50) throw new Error("압축이 깨진 파일입니다.");
+      const nameLen = dv.getUint16(e.lho + 26, true);
+      const extraLen = dv.getUint16(e.lho + 28, true);
+      const start = e.lho + 30 + nameLen + extraLen;
+      const raw = u8.subarray(start, start + e.compSize);
+      return e.method === 0 ? raw : await inflateRaw(raw);
+    }
+    async function text(name) {
+      const b = await bytes(name);
+      return b === null ? null : new TextDecoder("utf-8").decode(b);
+    }
+    return { has: (n) => index.has(n), text, names: () => [...index.keys()] };
+  }
+
+  // ─────────────── xlsx 읽기 ───────────────
+
+  function parseXml(txt) {
+    const doc = new DOMParser().parseFromString(txt, "application/xml");
+    if (doc.getElementsByTagName("parsererror").length) throw new Error("파일 내용을 해석하지 못했습니다.");
+    return doc;
+  }
+  const els = (node, name) => node.getElementsByTagNameNS("*", name);
+  const first = (node, name) => els(node, name)[0] || null;
+
+  function colNum(ref) {                    // "BC12" -> 55
+    let n = 0;
+    for (const ch of ref) {
+      const c = ch.charCodeAt(0);
+      if (c < 65 || c > 90) break;            // 숫자가 나오면 열 이름이 끝난 것
+      n = n * 26 + (c - 64);
+    }
+    return n;
+  }
+
+  function siText(si) {                     // 서식 조각(r)으로 쪼개진 글자를 잇는다
+    let out = "";
+    for (const t of els(si, "t")) {
+      let p = t.parentNode, inPh = false;
+      while (p && p.nodeType === 1) {
+        if (p.localName === "rPh") { inPh = true; break; }
+        if (p.localName === "si" || p.localName === "is") break;
+        p = p.parentNode;
+      }
+      if (!inPh) out += t.textContent;
+    }
+    return out;
+  }
+
+  function cellValue(c, shared) {
+    const t = c.getAttribute("t") || "n";
+    if (t === "inlineStr") { const is = first(c, "is"); return is ? siText(is) : ""; }
+    const v = first(c, "v");
+    if (!v) return null;
+    const raw = v.textContent;
+    if (t === "s") { const s = shared[parseInt(raw, 10)]; return s === undefined ? "" : s; }
+    if (t === "b") return raw === "1";
+    if (t === "e" || t === "str") return raw;
+    if (raw === "") return null;
+    const n = Number(raw);
+    return Number.isNaN(n) ? raw : n;
+  }
+
+  function parseSheet(xml, shared) {
+    const doc = parseXml(xml);
+    const cells = new Map();
+    let maxRow = 0, maxCol = 0, rIdx = 0;
+    for (const row of els(doc, "row")) {
+      const ra = row.getAttribute("r");
+      rIdx = ra ? parseInt(ra, 10) : rIdx + 1;
+      let cIdx = 0;
+      for (const c of els(row, "c")) {
+        const cr = c.getAttribute("r");
+        cIdx = cr ? colNum(cr) : cIdx + 1;
+        const val = cellValue(c, shared);
+        if (val === null || val === "") continue;
+        cells.set(rIdx + "," + cIdx, val);
+        if (rIdx > maxRow) maxRow = rIdx;
+        if (cIdx > maxCol) maxCol = cIdx;
+      }
+    }
+    return {
+      maxRow, maxCol,
+      cell: (r, c) => { const v = cells.get(r + "," + c); return v === undefined ? null : v; }
+    };
+  }
+
+  async function readWorkbook(file) {
+    const zip = await openZip(await file.arrayBuffer());
+    if (!zip.has("xl/workbook.xml")) throw new Error("엑셀 통합문서가 아닙니다.");
+    const wb = parseXml(await zip.text("xl/workbook.xml"));
+
+    const rels = new Map();
+    const relTxt = await zip.text("xl/_rels/workbook.xml.rels");
+    if (relTxt) for (const r of els(parseXml(relTxt), "Relationship")) {
+      let tgt = (r.getAttribute("Target") || "").replace(/^\//, "").replace(/^\.\//, "");
+      rels.set(r.getAttribute("Id"), tgt.startsWith("xl/") ? tgt : "xl/" + tgt);
+    }
+
+    const sheets = [];
+    for (const s of els(wb, "sheet")) {
+      const rid = s.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id")
+               || s.getAttribute("r:id");
+      sheets.push({ name: s.getAttribute("name") || "", path: rels.get(rid) || "" });
+    }
+    if (!sheets.length) throw new Error("시트를 찾지 못했습니다.");
+
+    const view = first(wb, "workbookView");
+    let active = view ? parseInt(view.getAttribute("activeTab") || "0", 10) : 0;
+    if (!(active >= 0 && active < sheets.length)) active = 0;
+
+    const shared = [];
+    const ssTxt = await zip.text("xl/sharedStrings.xml");
+    if (ssTxt) for (const si of els(parseXml(ssTxt), "si")) shared.push(siText(si));
+
+    async function sheet(which) {
+      const s = typeof which === "number" ? sheets[which] : sheets.find(x => x.name === which);
+      if (!s) throw new Error("시트를 찾지 못했습니다: " + which);
+      let xml = s.path ? await zip.text(s.path) : null;
+      if (xml === null) {                              // 경로가 어긋나면 파일 이름으로 찾는다
+        const tail = "/" + (s.path || "").split("/").pop().toLowerCase();
+        const guess = zip.names().find(n => tail.length > 1 && n.toLowerCase().endsWith(tail));
+        if (guess) xml = await zip.text(guess);
+      }
+      if (xml === null) throw new Error("시트 내용을 읽지 못했습니다.");
+      return parseSheet(xml, shared);
+    }
+    return { names: sheets.map(s => s.name), active, sheet };
+  }
+
+  // ─────────────── 공통 도우미 ───────────────
+
+  const str = (v) => String(v === null || v === undefined || v === false || v === 0 ? "" : v);
+  const isDigits = (s) => /^\d+$/.test(s);
+
+  /** 이동수업(선택과목 이동) 여부. A_이동A, C_수이C, F_수이 등. */
+  const isMove = (subj) => subj.indexOf("_") >= 0;
+
+  /**
+   * 공동교육과정 칸. 원적반 시간표와 맞댈 상대가 없으므로 대조하지 않는다.
+   * 8·9교시처럼 정규 교시를 넘어가는 자리에 들어오고, NEIS에는 특별실 행에만 적힌다.
+   */
+  const isJoint = (subj) => subj.indexOf("(공동)") >= 0 || subj.indexOf("공동교육") >= 0;
+
+  /**
+   * 과목 대응표의 키. 학년을 붙여 구분한다.
+   * 같은 체육이라도 학년마다 공식 과목명이 달라(체육2 / 스포츠 문화 /
+   * 스포츠 생활) 학년을 빼면 서로 덮어쓴다. 끝의 숫자·알파벳도 떼지
+   * 않는다. 분반 기호일 때도 있고(고전A) 과목명의 일부일 때도 있어
+   * (공통국어2) 겉모습으로는 구분할 수 없다.
+   */
+  const keyOf = (grade, subj) => grade + "-" + subj.trim();
+
+  /**
+   * NEIS 과목명 앞에 붙는 보강·대체 표시를 뗀다. "(보)스포츠 생활" -> "스포츠 생활"
+   * 보강은 NEIS가 맞게 적어 둔 것이지 고칠 자리가 아니므로 과목명 비교에서만 무시한다.
+   * 화면에는 NEIS에 적힌 그대로 보여 준다. 괄호 안이 세 글자를 넘으면 표시로 보지 않는다.
+   */
+  const bareSubj = (s) => String(s).trim().replace(/^\(\s*[^()]{1,3}\s*\)\s*/, "");
+
+  /**
+   * 컴시간 A열의 "목\n(17)" 에서 요일과 날짜를 읽는다.
+   * 컴시간은 연·월을 적지 않으므로 요일과 일자만 확인할 수 있다.
+   */
+  function readComDate(ws) {
+    for (let r = 1; r <= Math.min(ws.maxRow, 10); r++) {
+      const m = /([월화수목금토일])\s*\(\s*(\d{1,2})\s*\)/.exec(str(ws.cell(r, 1)));
+      if (m) return { weekday: m[1], dom: parseInt(m[2], 10),
+                      text: m[1] + "요일 " + parseInt(m[2], 10) + "일" };
+    }
+    return null;
+  }
+
+  /** NEIS B1의 "2026.09.14.(월요일)" */
+  function readNeisDate(s) {
+    const m = /(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})[.\-/]*\s*\(\s*([월화수목금토일])/.exec(s);
+    if (!m) return null;
+    return { y: +m[1], mon: +m[2], dom: +m[3], weekday: m[4], text: s };
+  }
+
+  const sameDay = (a, b) => a.y === b.y && a.mon === b.mon && a.dom === b.dom;
+
+  // ─────────────── 컴시간 ───────────────
+
+  /** 헤더에서 열번호 -> [학년, 반] 배치를 읽는다. 반 수가 몇이든 따라간다. */
+  function readLayout(ws) {
+    let gradeRow = null, clsRow = null;
+    for (let r = 1; r <= 6; r++) {
+      const vals = [];
+      for (let c = 1; c <= ws.maxCol; c++) vals.push(str(ws.cell(r, c)));
+      if (gradeRow === null && vals.some(v => v.indexOf("학년") >= 0)) gradeRow = r;
+      else if (gradeRow && clsRow === null &&
+               vals.filter(v => isDigits(v.trim())).length >= 5) { clsRow = r; break; }
+    }
+    if (!(gradeRow && clsRow)) throw new Error(
+      "컴시간 파일에서 학년·반 헤더를 찾지 못했습니다.\n전체시간표 형식으로 받으셨는지 확인해 주세요.");
+
+    const layout = new Map();
+    let grade = null;
+    for (let c = 1; c <= ws.maxCol; c++) {
+      const m = /^\s*(\d+)\s*학년/.exec(str(ws.cell(gradeRow, c)));
+      if (m) grade = parseInt(m[1], 10);
+      const cv = str(ws.cell(clsRow, c)).trim();
+      if (grade && isDigits(cv)) layout.set(c, [grade, parseInt(cv, 10)]);
+    }
+    if (!layout.size) throw new Error("컴시간 파일에서 학급 열을 찾지 못했습니다.");
+    return layout;
+  }
+
+  /** Map "학년,반,교시" -> [과목, 교사] */
+  async function readComcigan(file) {
+    const wb = await readWorkbook(file);
+    const ws = await wb.sheet(wb.names.indexOf("전체시간표") >= 0 ? "전체시간표" : 0);
+    const layout = readLayout(ws);
+    const out = new Map();
+    for (let r = 1; r <= ws.maxRow; r++) {
+      const period = str(ws.cell(r, 2)).trim();
+      if (!isDigits(period)) continue;
+      for (const [col, gc] of layout) {
+        const v = ws.cell(r, col);
+        if (!v) continue;
+        const txt = String(v).split("_x000D_").join("\n").split("\r").join("\n");
+        const parts = txt.split("\n").map(x => x.trim()).filter(x => x);
+        if (!parts.length) continue;
+        out.set(gc[0] + "," + gc[1] + "," + parseInt(period, 10),
+                [parts[0], parts.length > 1 ? parts[1] : ""]);
+      }
+    }
+    if (!out.size) throw new Error(
+      "컴시간 파일에서 시간표 칸을 하나도 읽지 못했습니다.\n전체시간표로 받으셨는지 확인해 주세요.");
+    return { cells: out, date: readComDate(ws) };
+  }
+
+  // ─────────────── NEIS ───────────────
+
+  /**
+   * {cells, roster, day}
+   *   cells  "학년,반,교시" -> [과목, 교사]   번호 붙은 원적반 행만
+   *   roster "학년,교시" -> Set(교사)         특별실 행까지 포함
+   */
+  async function readNeis(file) {
+    const wb = await readWorkbook(file);
+    const ws = await wb.sheet(wb.active);
+
+    const day = str(ws.cell(1, 2)).trim();      // "2026.09.14.(월요일)"
+
+    const rows = [];
+    let gradeOfFile = null;
+    for (let r = 1; r <= ws.maxRow; r++) {
+      const label = ws.cell(r, 1);
+      if (!label) continue;
+      const m = /(\d+)\s*학년\s*(\d+)\s*반/.exec(String(label));
+      if (m) {
+        gradeOfFile = parseInt(m[1], 10);
+        rows.push([parseInt(m[1], 10), parseInt(m[2], 10), r]);
+      } else {
+        rows.push([null, null, r]);
+      }
+    }
+
+    const cells = new Map(), roster = new Map();
+    for (const [grade, cls, r] of rows) {
+      const g = grade || gradeOfFile;         // 특별실 행은 파일의 학년으로 귀속
+      for (let c = 2; c <= ws.maxCol; c++) {
+        const v = ws.cell(r, c);
+        if (!v) continue;
+        const txt = String(v).trim();
+        const mm = /^([^\n]*)\(([^()]+)\)$/.exec(txt);   // 파이썬 re.match 와 같게(줄바꿈 제외)
+        const subj = mm ? mm[1].trim() : txt;
+        const teacher = mm ? mm[2].trim() : "";
+        if (cls !== null) cells.set(grade + "," + cls + "," + (c - 1), [subj, teacher]);
+        if (teacher && g) {
+          const k = g + "," + (c - 1);
+          if (!roster.has(k)) roster.set(k, new Set());
+          roster.get(k).add(teacher);
+        }
+      }
+    }
+    if (!cells.size) throw new Error(
+      "NEIS 파일에서 학급 행을 찾지 못했습니다.\n'강의실(원적반)' 형식의 일일 시간표인지 확인해 주세요.");
+    return { cells, roster, day, date: readNeisDate(day) };
+  }
+
+  // ─────────────── 대조 ───────────────
+
+  /** 교사가 일치하는 칸에서 과목명 대응을 학습한다. */
+  function learnMap(com, neis, existing) {
+    const learned = Object.assign({}, existing);
+    for (const [key, cv] of com) {
+      const cs = cv[0], ct = cv[1];
+      const parts = key.split(",");
+      const grade = Number(parts[0]), cls = Number(parts[1]);
+      if (isMove(cs) || isJoint(cs) || cls === VIRTUAL_CLASS || !neis.has(key)) continue;
+      const ns = neis.get(key)[0], nt = neis.get(key)[1];
+      if (ct && ct === nt) {
+        const k = keyOf(grade, cs);
+        if (!Object.prototype.hasOwnProperty.call(learned, k)) learned[k] = bareSubj(ns);
+      }
+    }
+    return learned;
+  }
+
+  /** [{grade, cls, period, why, neis, com}] */
+  function compare(com, neis, roster, smap) {
+    const issues = [];
+    const keys = [...com.keys()].sort((a, b) => {
+      const x = a.split(",").map(Number), y = b.split(",").map(Number);
+      return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    });
+    for (const key of keys) {
+      const p = key.split(",").map(Number);
+      const grade = p[0], cls = p[1], period = p[2];
+      const cs = com.get(key)[0], ct = com.get(key)[1];
+      const cv = cs + " (" + ct + ")";
+
+      if (isJoint(cs)) continue;             // 공동교육과정: 맞댈 상대가 없다
+
+      if (isMove(cs) || cls === VIRTUAL_CLASS) {
+        // 학생이 원적반을 떠나므로 그 교시 전체에서 교사를 찾는다
+        const set = roster.get(grade + "," + period);
+        if (ct && !(set && set.has(ct))) {
+          issues.push({ grade: grade, cls: cls, period: period, com: cv, neis: "그 교시에 없음",
+            why: cls === VIRTUAL_CLASS ? "가상학급 교사 없음" : "이동수업 교사 없음" });
+        }
+        continue;
+      }
+
+      if (!neis.has(key)) {
+        issues.push({ grade: grade, cls: cls, period: period, why: "NEIS 비어 있음", neis: "—", com: cv });
+        continue;
+      }
+      const ns = neis.get(key)[0], nt = neis.get(key)[1];
+      const nv = ns + " (" + nt + ")";
+
+      if (ct !== nt) {
+        issues.push({ grade: grade, cls: cls, period: period, why: "교사 다름", neis: nv, com: cv });
+        continue;
+      }
+      const want = smap[keyOf(grade, cs)];
+      if (want && bareSubj(want) !== bareSubj(ns)) {
+        issues.push({ grade: grade, cls: cls, period: period, why: "과목 다름", neis: nv, com: cv });
+      }
+    }
+    return issues;
+  }
+
+  /**
+   * 날짜·요일이 맞는지 먼저 본다. 어긋나면 대조하지 않고 그 사실만 알린다.
+   * 다른 날 파일을 맞대면 거의 모든 칸이 다르다고 나와, 목록이 아무 쓸모가 없기 때문이다.
+   * 컴시간은 연·월을 적지 않으므로 요일과 일자로 맞춘다.
+   */
+  function checkDates(comName, comDate, stamps) {
+    const shown = (s) => [s.name, s.day || "날짜를 읽지 못함"];
+    const dated = stamps.filter(s => s.date);
+
+    for (const s of dated) {
+      if (!sameDay(s.date, dated[0].date)) {
+        return { title: "NEIS 파일의 날짜가 서로 다릅니다.",
+                 rows: stamps.map(shown),
+                 hint: "같은 날짜로 받은 파일만 함께 고르세요. 대조는 하지 않았습니다." };
+      }
+    }
+    if (comDate && dated.length) {
+      const n = dated[0].date;
+      if (comDate.weekday !== n.weekday || comDate.dom !== n.dom) {
+        return { title: "컴시간과 NEIS가 서로 다른 날입니다.",
+                 rows: [[comName, comDate.text]].concat(stamps.map(shown)),
+                 hint: "같은 날 시간표를 고르셨는지 확인해 주세요. 대조는 하지 않았습니다." };
+      }
+    }
+    return null;
+  }
+
+  /** 파일을 받아 대조까지. 저장은 부르는 쪽에서 한다. */
+  async function run(comFile, neisFiles, smapIn) {
+    const comRead = await readComcigan(comFile);
+    let com = comRead.cells;
+
+    const neis = new Map(), roster = new Map(), days = [], stamps = [];
+    for (const f of neisFiles) {
+      const r = await readNeis(f);
+      stamps.push({ name: (f && f.name) || "NEIS 파일", day: r.day, date: r.date });
+      for (const kv of r.cells) neis.set(kv[0], kv[1]);
+      for (const kv of r.roster) {
+        if (!roster.has(kv[0])) roster.set(kv[0], new Set());
+        for (const t of kv[1]) roster.get(kv[0]).add(t);
+      }
+      if (r.day) days.push(r.day);
+    }
+
+    const comName = (comFile && comFile.name) || "컴시간 파일";
+    const blocked = checkDates(comName, comRead.date, stamps);
+    if (blocked) return { blocked: blocked };
+
+    const unread = [];                       // 날짜를 못 읽은 파일은 확인을 건너뛴 것이니 알린다
+    if (!comRead.date) unread.push(comName);
+    for (const s of stamps) if (!s.date) unread.push(s.name);
+
+    const grades = [...new Set([...neis.keys()].map(k => Number(k.split(",")[0])))].sort((a, b) => a - b);
+    const filtered = new Map();
+    for (const kv of com) if (grades.indexOf(Number(kv[0].split(",")[0])) >= 0) filtered.set(kv[0], kv[1]);
+    com = filtered;
+
+    const before = Object.keys(smapIn || {}).length;
+    const smap = learnMap(com, neis, smapIn || {});
+    const day = days.length ? [...new Set(days)].sort()[0] : "";
+
+    return {
+      issues: compare(com, neis, roster, smap),
+      cells: com.size, grades: grades, day: day, smap: smap,
+      learned: Object.keys(smap).length - before,
+      warn: unread.length ? "날짜를 읽지 못한 파일이 있어 날짜 확인을 건너뛰었습니다: " + unread.join(", ") : ""
+    };
+  }
+
+  return { run };                            // 밖에서 쓰는 것은 이것 하나
+})();
+// ===== CORE END =====
+
+
+// ─────────────────────── 화면 ───────────────────────
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const MAP_KEY = "timetable_subject_map_v1";
+  const state = { com: null, neis: [], smap: {} };
+
+  // ── 과목 대응표 (브라우저에 저장) ──
+  function loadMap() {
+    try {
+      const raw = localStorage.getItem(MAP_KEY);
+      state.smap = raw ? JSON.parse(raw) : {};
+    } catch (e) { state.smap = {}; }
+    showMapCount();
+  }
+  function saveMap() {
+    try { localStorage.setItem(MAP_KEY, JSON.stringify(state.smap, null, 2)); }
+    catch (e) { /* 저장이 막힌 환경. 내보내기로 남겨 두시면 됩니다 */ }
+    showMapCount();
+  }
+  function showMapCount() { $("mapcount").textContent = Object.keys(state.smap).length; }
+
+  // ── 파일 고르기 / 끌어다 놓기 ──
+  function setCom(files) {
+    if (!files.length) return;
+    state.com = files[0];
+    const el = $("name-com");
+    el.textContent = files[0].name;
+    el.classList.add("set");
+    refresh();
+  }
+  function setNeis(files) {
+    if (!files.length) return;
+    state.neis = [].slice.call(files);
+    const names = state.neis.map(f => f.name).join(", ");
+    const el = $("name-neis");
+    el.textContent = names.length > 70 ? state.neis.length + "개 파일 선택됨" : names;
+    el.classList.add("set");
+    refresh();
+  }
+  function refresh() { $("run").disabled = !(state.com && state.neis.length); }
+
+  $("file-com").addEventListener("change", e => setCom(e.target.files));
+  $("file-neis").addEventListener("change", e => setNeis(e.target.files));
+  document.querySelectorAll("[data-open]").forEach(b => {
+    b.addEventListener("click", () => $("file-" + b.dataset.open).click());
+  });
+
+  [["zone-com", setCom], ["zone-neis", setNeis]].forEach(pair => {
+    const z = $(pair[0]);
+    z.addEventListener("dragover", e => { e.preventDefault(); z.classList.add("over"); });
+    z.addEventListener("dragleave", () => z.classList.remove("over"));
+    z.addEventListener("drop", e => {
+      e.preventDefault();
+      z.classList.remove("over");
+      pair[1]([].slice.call(e.dataTransfer.files));
+    });
+  });
+  window.addEventListener("dragover", e => e.preventDefault());
+  window.addEventListener("drop", e => e.preventDefault());
+
+  // ── 대조 ──
+  $("run").addEventListener("click", async () => {
+    $("status").textContent = "대조 중…";
+    $("result").replaceChildren();
+    let r;
+    try {
+      r = await TT.run(state.com, state.neis, state.smap);
+    } catch (err) {
+      showError("파일을 읽지 못했습니다.", (err && err.message) || String(err));
+      return;
+    }
+    if (r.blocked) { showBlocked(r.blocked); return; }
+
+    const grew = Object.keys(r.smap).length - Object.keys(state.smap).length;
+    state.smap = r.smap;
+    if (grew > 0) saveMap(); else showMapCount();
+
+    $("status").textContent =
+      (r.day || "날짜 미확인") + " · " +
+      (r.grades.length ? r.grades.join("·") : "?") + "학년 · " + r.cells + "칸 대조" +
+      (r.learned ? "  |  과목 대응표 " + r.learned + "개 새로 학습" : "") +
+      (r.warn ? "  |  " + r.warn : "");
+
+    if (!r.issues.length) showClean(); else showIssues(r.issues);
+  });
+
+  // ── 결과 그리기 ──
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function line(tag, text, muted, mark) {  // 이름표 폭을 맞춰 두 줄을 나란히 놓는다
+    const d = el("div", muted ? "ln neis" : "ln");
+    const val = el("span", "val", text);
+    if (mark) val.append(el("span", "mark", mark));
+    d.append(el("span", "tag", tag), val);
+    return d;
+  }
+
+  function showError(title, detail) {
+    const box = el("div", "err");
+    box.append(el("div", "t", title), el("div", "d", detail));
+    $("result").replaceChildren(box);
+    $("status").textContent = "중단됨";
+  }
+
+  function showBlocked(b) {                // 날짜가 어긋나 대조를 멈춘 경우
+    const box = el("div", "err");
+    box.append(el("div", "t", b.title));
+    const list = el("div", "files");
+    for (const row of b.rows) {
+      const line = el("div", "fileline");
+      line.append(el("span", "fname", row[0]), el("span", "fday", row[1]));
+      list.append(line);
+    }
+    box.append(list, el("div", "d", b.hint));
+    $("result").replaceChildren(box);
+    $("status").textContent = "중단됨 — 날짜가 맞지 않습니다";
+  }
+
+  function showClean() {
+    const box = el("div", "clean");
+    box.append(el("div", "big", "일치"), el("div", "sub", "NEIS를 고칠 자리가 없습니다."));
+    $("result").replaceChildren(box);
+  }
+
+  function showIssues(issues) {
+    const out = $("result");
+    out.replaceChildren();
+
+    const bar = el("div", "bar");
+    const count = el("span", "count");
+    const copy = el("button", "btn", "목록 복사");
+    copy.style.padding = "3px 10px";
+    copy.addEventListener("click", () => copyList(issues, copy));
+    bar.append(count, copy, el("span", "tip", "고친 자리는 왼쪽 칸을 눌러 표시하세요."));
+    out.append(bar);
+
+    const boxes = [];
+    for (const it of issues) {
+      const card = el("div", "card");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      const body = el("div", "body");
+      const head = el("div");
+      head.append(el("span", "slot", it.grade + "학년 " + it.cls + "반  " + it.period + "교시"),
+                  el("span", "why", it.why));
+      body.append(head,
+                  line("NEIS", it.neis, true),
+                  line("컴시간", it.com, false, "← 이대로 고치기"));
+      card.append(cb, body);
+      cb.addEventListener("change", () => { card.classList.toggle("done", cb.checked); tally(); });
+      out.append(card);
+      boxes.push(cb);
+    }
+
+    function tally() {
+      const done = boxes.filter(b => b.checked).length;
+      if (done === boxes.length) {
+        count.textContent = boxes.length + "건 모두 처리";
+        count.classList.add("alldone");
+      } else {
+        count.textContent = "고칠 자리 " + boxes.length + "건  ·  처리 " + done + "건";
+        count.classList.remove("alldone");
+      }
+    }
+    tally();
+  }
+
+  function copyList(issues, btn) {
+    const text = issues.map(it =>
+      "[" + it.why + "] " + it.grade + "학년 " + it.cls + "반 " + it.period + "교시\n" +
+      "   NEIS  : " + it.neis + "\n" +
+      "   컴시간: " + it.com + "   ← 이대로 수정").join("\n\n");
+    const done = () => { btn.textContent = "복사됨"; setTimeout(() => { btn.textContent = "목록 복사"; }, 1400); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+    } else fallbackCopy(text, done);
+  }
+  function fallbackCopy(text, done) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.append(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) { /* 복사가 막힌 환경 */ }
+    ta.remove();
+  }
+
+  // ── 대응표 버튼 ──
+  document.querySelectorAll("[data-map]").forEach(b => b.addEventListener("click", () => {
+    const act = b.dataset.map;
+    if (act === "export") {
+      const blob = new Blob([JSON.stringify(state.smap, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "subject_map.json";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } else if (act === "import") {
+      $("file-map").click();
+    } else if (act === "clear") {
+      if (!confirm("과목 대응표를 지웁니다.\n학기가 바뀌어 과목 편성이 달라졌을 때만 지우세요.")) return;
+      state.smap = {};
+      saveMap();
+      $("status").textContent = "과목 대응표를 지웠습니다. 다음 대조부터 새로 학습합니다.";
+    }
+  }));
+
+  $("file-map").addEventListener("change", e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      try {
+        state.smap = Object.assign({}, state.smap, JSON.parse(fr.result));
+        saveMap();
+        $("status").textContent = "과목 대응표를 가져왔습니다. 모두 " + Object.keys(state.smap).length + "개.";
+      } catch (err) {
+        $("status").textContent = "대응표 파일을 읽지 못했습니다. subject_map.json 이 맞는지 확인해 주세요.";
+      }
+    };
+    fr.readAsText(f, "utf-8");
+    e.target.value = "";
+  });
+
+  // ── 첫 화면 ──
+  function showIdle() {
+    const box = el("div", "hint");
+    box.append(el("div", undefined, "파일을 고르고 대조를 시작하세요."),
+               el("div", "sub", "컴시간 파일 1개, NEIS 학년별 파일은 한 번에 여러 개 고를 수 있습니다. 끌어다 놓아도 됩니다."));
+    $("result").replaceChildren(box);
+  }
+
+  if (!window.DecompressionStream) {
+    showError("이 브라우저로는 열 수 없습니다.",
+      "엣지(Edge)나 크롬으로 열어 주세요. 인터넷 익스플로러에서는 동작하지 않습니다.");
+  } else {
+    showIdle();
+  }
+  loadMap();
+})();
+</script>
+</body>
+</html>
