@@ -4,8 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="author" content="yeoniis">
-<title>시간표 대조</title>
-<!-- 시간표 대조 — © 2026 yeoniis. 문의: shinhsif2024@gmail.com -->
+<title>Daily Checker — 컴시간 ↔ NEIS 시간표 대조</title>
+<!-- Daily Checker — 컴시간 ↔ NEIS 시간표 대조 · © 2026 yeoniis · 문의 shinhsif2024@gmail.com
+     고른 파일은 이 브라우저 안에서만 읽는다. 어떤 내용도 밖으로 보내지 않는다.
+     네트워크를 쓰는 코드는 이 파일 어디에도 없다. -->
 <style>
   :root{
     --paper:#EEF1F4; --card:#FFFFFF; --ink:#17303F; --muted:#6B7A85;
@@ -21,9 +23,11 @@
   }
   .top{background:var(--card); border-bottom:1px solid var(--line); padding:16px 18px 14px; flex:none}
   .pick{display:flex; align-items:center; gap:12px; margin-bottom:8px;
-        border:1px dashed transparent; border-radius:8px; padding:3px; transition:.12s}
+        border:1px dashed var(--line); border-radius:8px; padding:5px 10px; transition:.12s}
   .pick.over{border-color:var(--ink); background:var(--paper)}
-  .pick .name{color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .pick .name{flex:1; min-width:0; color:var(--muted);
+              overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .pick .tip{flex:none; font-size:12px; color:var(--muted)}
   .pick .name.set{color:var(--ink)}
   button{font:inherit; border:0; border-radius:6px; cursor:pointer}
   .btn{background:var(--paper); color:var(--ink); padding:6px 14px; flex:none}
@@ -34,6 +38,9 @@
   main{flex:1; overflow:auto; padding:14px 16px 20px}
   .hint{text-align:center; color:var(--muted); padding:60px 20px}
   .hint .sub{font-size:13px; margin-top:6px}
+  .hint .safe{display:inline-block; margin-top:22px; padding:8px 13px; text-align:left;
+              border:1px solid var(--line); border-radius:4px; background:var(--card); font-size:12px}
+  .hint .safe b{color:var(--ok)}
   .clean{text-align:center; padding:54px 20px}
   .clean .big{font-size:26px; font-weight:700; color:var(--ok)}
   .clean .sub{color:var(--muted); margin-top:8px}
@@ -70,7 +77,8 @@
   footer .made{flex-basis:100%; color:var(--muted)}
   footer .made a{color:inherit}
   footer .made a:hover{color:var(--ink)}
-  @media (max-width:560px){ .bar .tip{display:none} footer{flex-wrap:wrap} }
+  footer .privacy{flex-basis:100%; color:var(--muted)}
+  @media (max-width:560px){ .bar .tip,.pick .tip{display:none} footer{flex-wrap:wrap} }
 </style>
 </head>
 <body>
@@ -79,10 +87,12 @@
   <div class="pick" id="zone-com">
     <button class="btn" data-open="com">컴시간 파일 고르기</button>
     <span class="name" id="name-com">선택 안 됨</span>
+    <span class="tip">이 칸에 끌어다 놓아도 됩니다</span>
   </div>
   <div class="pick" id="zone-neis">
     <button class="btn" data-open="neis">NEIS 파일 고르기</button>
     <span class="name" id="name-neis">선택 안 됨</span>
+    <span class="tip">이 칸에 끌어다 놓아도 됩니다 (여러 개)</span>
   </div>
   <button class="run" id="run" disabled>대조 시작</button>
   <input type="file" id="file-com" accept=".xlsx" hidden>
@@ -100,7 +110,8 @@
     <button class="link" data-map="import">가져오기</button>
     <button class="link" data-map="clear">지우기</button>
   </span>
-  <span class="made">© 2026 yeoniis · 문의 <a href="mailto:shinhsif2024@gmail.com?subject=%EC%8B%9C%EA%B0%84%ED%91%9C%20%EB%8C%80%EC%A1%B0%20%EB%AC%B8%EC%9D%98">shinhsif2024@gmail.com</a></span>
+  <span class="privacy">입력한 파일은 이 PC안에서만 처리됩니다. 엑셀 파일에 포함된 자료는 서버로 전송되지 않습니다. 이 브라우저의 쿠키를 지우면 과목 대응표도 함께 지워집니다.</span>
+  <span class="made"><b>Daily Checker</b> · 컴시간 ↔ NEIS 시간표 대조 · © 2026 yeoniis · 문의 <a href="mailto:shinhsif2024@gmail.com?subject=Daily%20Checker%20%EB%AC%B8%EC%9D%98">shinhsif2024@gmail.com</a></span>
 </footer>
 
 <script>
@@ -800,8 +811,12 @@ const TT = (function () {
   // ── 첫 화면 ──
   function showIdle() {
     const box = el("div", "hint");
+    const safe = el("div", "safe");
+    safe.append(el("b", undefined, "입력한 파일은 이 PC안에서만 처리됩니다."),
+                el("div", undefined, "엑셀 파일에 포함된 자료가 서버로 전송되지 않으며 인터넷 이용이 불가능한 PC에서도 이 도구는 동작합니다."));
     box.append(el("div", undefined, "파일을 고르고 대조를 시작하세요."),
-               el("div", "sub", "컴시간 파일 1개, NEIS 학년별 파일은 한 번에 여러 개 고를 수 있습니다. 끌어다 놓아도 됩니다."));
+               el("div", "sub", "컴시간 파일 1개, NEIS 학년별 파일은 한 번에 여러 개 고를 수 있습니다."),
+               safe);
     $("result").replaceChildren(box);
   }
 
