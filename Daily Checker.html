@@ -117,7 +117,6 @@
 <script>
 // ===== CORE START =====
 // 컴시간 ↔ NEIS 대조 핵심. 화면도 저장소도 건드리지 않는다.
-// check.py / 시간표대조.pyw 와 같은 규칙으로 판정한다.
 const TT = (function () {
 
   const VIRTUAL_CLASS = 10;   // 가상학급. NEIS에 교실명만 나오므로 교사만 확인
@@ -820,9 +819,11 @@ const TT = (function () {
     $("result").replaceChildren(box);
   }
 
+  // 엑셀을 푸는 DecompressionStream 이 없는 옛 브라우저를 거른다(사파리 16.3 이하 등).
+  // 인터넷 익스플로러는 여기까지 오지 못한다 — 이 스크립트를 읽다가 문법 오류로 멈춘다.
   if (!window.DecompressionStream) {
     showError("이 브라우저로는 열 수 없습니다.",
-      "엣지(Edge)나 크롬으로 열어 주세요. 인터넷 익스플로러에서는 동작하지 않습니다.");
+      "엑셀 파일을 푸는 기능이 이 브라우저에 없습니다.\n엣지(Edge)나 크롬으로 열어 주세요.");
   } else {
     showIdle();
   }
