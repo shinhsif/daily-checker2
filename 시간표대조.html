@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="yeoniis">
 <title>시간표 대조</title>
+<!-- 시간표 대조 — © 2026 yeoniis. 문의: shinhsif2024@gmail.com -->
 <style>
   :root{
     --paper:#EEF1F4; --card:#FFFFFF; --ink:#17303F; --muted:#6B7A85;
@@ -60,10 +62,14 @@
   .err .fname{flex:1; min-width:0; color:var(--muted); word-break:break-all}
   .err .fday{flex:none; font-weight:700}
   footer{background:var(--card); border-top:1px solid var(--line); padding:7px 18px; flex:none;
-         display:flex; gap:14px; align-items:center; font-size:12px; color:var(--muted)}
+         display:flex; flex-wrap:wrap; gap:5px 14px; align-items:center;
+         font-size:12px; color:var(--muted)}
   footer .tools{margin-left:auto; display:flex; gap:6px; align-items:center; flex:none}
   footer .link{background:none; color:var(--muted); text-decoration:underline; padding:2px}
   footer .link:hover{color:var(--ink)}
+  footer .made{flex-basis:100%; color:var(--muted)}
+  footer .made a{color:inherit}
+  footer .made a:hover{color:var(--ink)}
   @media (max-width:560px){ .bar .tip{display:none} footer{flex-wrap:wrap} }
 </style>
 </head>
@@ -94,6 +100,7 @@
     <button class="link" data-map="import">가져오기</button>
     <button class="link" data-map="clear">지우기</button>
   </span>
+  <span class="made">© 2026 yeoniis · 문의 <a href="mailto:shinhsif2024@gmail.com?subject=%EC%8B%9C%EA%B0%84%ED%91%9C%20%EB%8C%80%EC%A1%B0%20%EB%AC%B8%EC%9D%98">shinhsif2024@gmail.com</a></span>
 </footer>
 
 <script>
