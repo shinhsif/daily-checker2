@@ -714,10 +714,7 @@ const TT = (function () {
 
     const bar = el("div", "bar");
     const count = el("span", "count");
-    const copy = el("button", "btn", "목록 복사");
-    copy.style.padding = "3px 10px";
-    copy.addEventListener("click", () => copyList(issues, copy));
-    bar.append(count, copy, el("span", "tip", "고친 자리는 왼쪽 칸을 눌러 표시하세요."));
+    bar.append(count, el("span", "tip", "고친 자리는 왼쪽 칸을 눌러 표시하세요."));
     out.append(bar);
 
     const boxes = [];
@@ -749,25 +746,6 @@ const TT = (function () {
       }
     }
     tally();
-  }
-
-  function copyList(issues, btn) {
-    const text = issues.map(it =>
-      "[" + it.why + "] " + it.grade + "학년 " + it.cls + "반 " + it.period + "교시\n" +
-      "   NEIS  : " + it.neis + "\n" +
-      "   컴시간: " + it.com + "   ← 이대로 수정").join("\n\n");
-    const done = () => { btn.textContent = "복사됨"; setTimeout(() => { btn.textContent = "목록 복사"; }, 1400); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
-    } else fallbackCopy(text, done);
-  }
-  function fallbackCopy(text, done) {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    document.body.append(ta);
-    ta.select();
-    try { document.execCommand("copy"); done(); } catch (e) { /* 복사가 막힌 환경 */ }
-    ta.remove();
   }
 
   // ── 대응표 버튼 ──
