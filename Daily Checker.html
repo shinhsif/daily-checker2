@@ -38,6 +38,7 @@
   main{flex:1; overflow:auto; padding:14px 16px 20px}
   .hint{text-align:center; color:var(--muted); padding:60px 20px}
   .hint .sub{font-size:13px; margin-top:6px}
+  .hint .map{font-size:12px; margin-top:18px}
   .hint .safe{display:inline-block; margin-top:22px; padding:8px 13px; text-align:left;
               border:1px solid var(--line); border-radius:4px; background:var(--card); font-size:12px}
   .hint .safe b{color:var(--ok)}
@@ -583,22 +584,53 @@ const TT = (function () {
 (function () {
   const $ = (id) => document.getElementById(id);
   const MAP_KEY = "timetable_subject_map_v1";
-  const state = { com: null, neis: [], smap: {} };
+  const STAMP_KEY = "timetable_subject_map_saved_v1";   // 이 도구가 표를 저장한 시각
+  const state = { com: null, neis: [], smap: {}, stamp: "" };
 
   // ── 과목 대응표 (브라우저에 저장) ──
   function loadMap() {
     try {
       const raw = localStorage.getItem(MAP_KEY);
       state.smap = raw ? JSON.parse(raw) : {};
-    } catch (e) { state.smap = {}; }
-    showMapCount();
+      state.stamp = localStorage.getItem(STAMP_KEY) || "";
+    } catch (e) { state.smap = {}; state.stamp = ""; }
+    showMapState();
   }
   function saveMap() {
-    try { localStorage.setItem(MAP_KEY, JSON.stringify(state.smap, null, 2)); }
-    catch (e) { /* 저장이 막힌 환경. 내보내기로 남겨 두시면 됩니다 */ }
-    showMapCount();
+    const now = new Date().toISOString();
+    try {
+      localStorage.setItem(MAP_KEY, JSON.stringify(state.smap, null, 2));
+      localStorage.setItem(STAMP_KEY, now);
+      state.stamp = now;
+    } catch (e) { /* 저장이 막힌 환경. 내보내기로 남겨 두시면 됩니다 */ }
+    showMapState();
   }
-  function showMapCount() { $("mapcount").textContent = Object.keys(state.smap).length; }
+
+  /** 저장한 시각을 "2026-09-21 14:03" 으로. 기록이 없거나 깨졌으면 빈 문자열. */
+  function stampText(iso) {
+    const d = new Date(iso);
+    if (!iso || isNaN(d.getTime())) return "";
+    const p = (n) => String(n).padStart(2, "0");
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) +
+           " " + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+
+  /**
+   * 첫 화면에 적어 두는 한 줄. 같은 브라우저로 연 다른 HTML 파일은 이 저장소를 함께 쓴다.
+   * 개수나 갱신 시각이 기억과 다르면 이 도구 밖에서 표가 바뀐 것이니,
+   * 대조를 시작하기 전에 알아챌 수 있다. 갱신 시각은 이 도구가 저장할 때만 적힌다.
+   */
+  function mapSummary() {
+    const n = Object.keys(state.smap).length;
+    if (!n) return "과목 대응표 없음 — 첫 대조에서 만들어집니다.";
+    return "과목 대응표 " + n + "개 · 마지막 갱신 " + (stampText(state.stamp) || "기록 없음");
+  }
+
+  function showMapState() {
+    $("mapcount").textContent = Object.keys(state.smap).length;
+    const line = $("mapstamp");               // 첫 화면에만 있다
+    if (line) line.textContent = mapSummary();
+  }
 
   // ── 파일 고르기 / 끌어다 놓기 ──
   function setCom(files) {
@@ -654,7 +686,7 @@ const TT = (function () {
 
     const grew = Object.keys(r.smap).length - Object.keys(state.smap).length;
     state.smap = r.smap;
-    if (grew > 0) saveMap(); else showMapCount();
+    if (grew > 0) saveMap(); else showMapState();
 
     $("status").textContent =
       (r.day || "날짜 미확인") + " · " +
@@ -791,21 +823,24 @@ const TT = (function () {
     const safe = el("div", "safe");
     safe.append(el("b", undefined, "입력한 파일은 이 PC안에서만 처리됩니다."),
                 el("div", undefined, "엑셀 파일에 포함된 자료가 서버로 전송되지 않으며 인터넷 이용이 불가능한 PC에서도 이 도구는 동작합니다."));
+    const map = el("div", "map", mapSummary());
+    map.id = "mapstamp";
     box.append(el("div", undefined, "파일을 고르고 대조를 시작하세요."),
                el("div", "sub", "컴시간 파일 1개, NEIS 학년별 파일은 한 번에 여러 개 고를 수 있습니다."),
+               map,
                safe);
     $("result").replaceChildren(box);
   }
 
   // 엑셀을 푸는 DecompressionStream 이 없는 옛 브라우저를 거른다(사파리 16.3 이하 등).
   // 인터넷 익스플로러는 여기까지 오지 못한다 — 이 스크립트를 읽다가 문법 오류로 멈춘다.
+  loadMap();                                 // 첫 화면에 대응표 상태를 적으려면 먼저 읽어야 한다
   if (!window.DecompressionStream) {
     showError("이 브라우저로는 열 수 없습니다.",
       "엑셀 파일을 푸는 기능이 이 브라우저에 없습니다.\n엣지(Edge)나 크롬으로 열어 주세요.");
   } else {
     showIdle();
   }
-  loadMap();
 })();
 </script>
 </body>
